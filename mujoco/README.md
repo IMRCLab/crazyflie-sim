@@ -7,8 +7,8 @@ This repository contains code to simulate the Crazyflie quadcopter using MuJoCo.
 1. Clone the repository:
 ```sh
     git clone https://github.com/yourusername/crazyflie-sim.git
-    git submodules sync
-    git submodules update --init --recursive
+    git submodule sync
+    git submodule update --init --recursive
 ```
 2. Build the python bindings of the crazyflie-firmware
 ```sh
