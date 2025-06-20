@@ -28,12 +28,12 @@ This repository contains code to simulate the Crazyflie quadcopter using MuJoCo.
 - To run the simulation for a `n` crazyflies with payloads WITHOUT tendons (i.e., with rigid links), execute the following command:
 ```sh
     cd crazyflie-sim/mujoco/scripts/
-python3 model.py --traj_path ../../data/1_robot_payload.yaml --models_path ../models/dynobench/point_1.yaml -p --mj ../models/xml/1cfs_payload.xml
+python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p --mj ../models/xml/2cfs_payload.xml
 ```
 - To run the simulation for a `n` crazyflies with payloads WITH tendons (i.e., without rigid links), execute the following command:
 ```sh
     cd crazyflie-sim/mujoco/scripts/
-python3 model.py --traj_path ../../data/1_robot_payload.yaml --models_path ../models/dynobench/point_1.yaml -p -t --mj ../models/xml/1cfs_payload_tendons.xml
+python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p -t --mj ../models/xml/2cfs_payload_tendons.xml
 ```
 ### Notes
 - You need `-p` to run the payload controller, and `-t -p` for payload models with tendons (because it has a different state vector).
