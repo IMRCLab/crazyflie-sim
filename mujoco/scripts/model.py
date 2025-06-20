@@ -389,9 +389,6 @@ class LeeController():
         self.setpoint.jerk.y = jerk[1]
         self.setpoint.jerk.z = jerk[2]
 
-        self.setpoint.snap.x = snap[0]
-        self.setpoint.snap.y = snap[1]
-        self.setpoint.snap.z = snap[2]
 
 
 
