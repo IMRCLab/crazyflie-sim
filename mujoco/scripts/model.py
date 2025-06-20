@@ -28,7 +28,7 @@ class LeePayloadController():
         self.ctrlLeeP.en_qdidot = 1
         self.ctrlLeeP.gen_hp = 1
         self.ctrlLeeP.en_accrb = 0
-        self.ctrlLeeP.formation_control = 1 # set this to 1 
+        self.ctrlLeeP.formation_control = 2 # set this to 1 if you don't want to follow a formation 
         self.gains = [
             (12, 10, 0),
             (14, 12, 0),
