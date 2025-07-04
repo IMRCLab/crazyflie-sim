@@ -23,17 +23,24 @@ This repository contains code to simulate the Crazyflie quadcopter using MuJoCo.
 - To run the simulation for a single crazyflie, execute the following command:
 ```sh
     cd crazyflie-sim/mujoco/scripts/
-   python3 model.py --traj_path ../../data/1cf_figure8_traj_fast_withoutpayload.csv --models_path ../models/dynobench/cf.yaml --mj ../models/xml/crazyflie.xml 
+   python3 model.py --traj_path ../../data/1cf_figure8_traj_fast_withoutpayload.csv --models_path ../models/dynobench/cf.yaml --mj ../models/xml/crazyflie.xml -v
 ```
 - To run the simulation for a `n` crazyflies with payloads WITHOUT tendons (i.e., with rigid links), execute the following command:
 ```sh
     cd crazyflie-sim/mujoco/scripts/
-python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p --mj ../models/xml/2cfs_payload.xml
+python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p --mj ../models/xml/2cfs_payload.xml -v
 ```
 - To run the simulation for a `n` crazyflies with payloads WITH tendons (i.e., without rigid links), execute the following command:
 ```sh
     cd crazyflie-sim/mujoco/scripts/
-python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p -t --mj ../models/xml/2cfs_payload_tendons.xml
+python3 model.py --traj_path ../../data/2_robots_payload.yaml --models_path ../models/dynobench/2payload.yaml -p -t --mj ../models/xml/2cfs_payload_tendons.xml -v
 ```
+
+- To run the simulation and track a goal pose only for the payload and log the results to compare them: 
+ ```sh
+ python3 log_states.py
+ ```
+ Inside you will find the commands necessary to check each run by itself.
 ### Notes
-- You need `-p` to run the payload controller, and `-t -p` for payload models with tendons (because it has a different state vector).
+- You need `-p` to run the payload controller, and `-t -p` for payload models with tendons (because it has a different state vector). You also need `-v` to open the visualizer.
+- Make sure that the lengths of the tendons in the `.xml` file are the same as your `run_data.json` for the `cable_length`. Similarly for the masses of the cfs and the payload.
