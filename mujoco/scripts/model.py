@@ -19,22 +19,22 @@ class LeePayloadController():
         cff.controllerLeePayloadInit(self.ctrlLeeP)
         self.ctrlLeeP.mass = model_params["m"][0]
         self.ctrlLeeP.mp = model_params["m_payload"]
-        self.l = model_params["l_payload"]
+        self.l =  model_params["l_payload"]
         arm_length = 0.046  # m
         arm = 0.707106781 * arm_length
         t2t = 0.006  # thrust-to-torque ratio
         self.num_robots = model_params["num_robots"]
         self.team_ids = [i for i in range(self.num_robots)]
-        self.ctrlLeeP.en_qdidot = 1
+        self.ctrlLeeP.en_qdidot = 0
         self.ctrlLeeP.gen_hp = 1
         self.ctrlLeeP.en_accrb = 0
-        self.ctrlLeeP.formation_control = 2 # set this to 1 if you don't want to follow a formation 
+        self.ctrlLeeP.formation_control = 1 # set this to 1 if you don't want to follow a formation 
         self.gains = [
-            (12, 10, 0),
-            (14, 12, 0),
+            (18, 12, 0),
+            (18, 12, 0),
             (0.03, 0.0012, 0.0),
             (100, 100, 100),
-            (1500),
+            (100),
         ]
         self.state = cff.state_t()
         self.sensors = cff.sensorData_t()
@@ -312,7 +312,9 @@ class LeePayloadController():
         self.ctrlLeeP.payload_vel_prev.z = self.state.payload_vel.z 
 
         eta = np.array([self.control.thrustSI, self.control.torque[0], self.control.torque[1], self.control.torque[2]]) 
-        return self.B0_inv @ eta
+        mf = self.B0_inv @ eta
+        u = np.clip(mf, 0.0, 0.15)     # keep within ctrlrange
+        return u
 
 
 class LeeController():
@@ -413,10 +415,18 @@ class CFMujoco():
         self.cam.distance = 2.5
         self.payload = sim_args["payload"]
         self.opt = mj.MjvOption()
-
+        self.actions_ff = True
+        self.ghost_mode = False
         # Load trajectory and model parameters
         self.model_params = sim_args["model_params"]
+        self.visualize = sim_args["visualize"]
         self.traj_path = sim_args["traj_path"]
+        self.out_path = sim_args["out_path"]
+        self.controller_list = []
+        # log states and actions and time
+        self.log_time   = []
+        self.log_states = []
+        self.log_actions = []
         self.plan_type = "dynoplan" #TODO: make this a parameter 
         if self.traj_path.endswith(".csv") and not self.payload: 
             # This is used for a single cf, reference trajectory (self.traj) contains:t px py pz vx vy vz ax ay az
@@ -429,6 +439,7 @@ class CFMujoco():
         elif self.traj_path.endswith(".yaml") and self.payload: 
             # this is used for the payload, the reference trajectory is provided from dynoplan.
             # check function dynoplan_to_mujoco_states() to understand the state structure of dynoplan and the mapping to mujoco
+            self.ghost_mode = True
             self.trajdata = loadyaml(self.traj_path)
             self.traj = np.array(self.trajdata["result"]["refstates"],dtype=np.float64)
             self.traj[:,2] += 0.5 # TODO: add 0.5 to the reference trajectory in the z-axis
@@ -442,7 +453,27 @@ class CFMujoco():
                 self.planned_actions = np.array(self.trajdata["result"]["actions_d"],dtype=np.float64)
             else:
                 self.planned_actions = None
+                self.actions_ff = False
             self.ts = np.linspace(0, self.T, num=self.T-1)
+        elif self.traj_path.endswith(".json") and self.payload:
+            self.actions_ff = False
+            self.plan_type = "payload_target_pos" #TODO: make this an arg 
+            self.traj_data = load_start_goal_states(self.traj_path)
+            self.model.opt.timestep = self.traj_data["dt"]
+            self.T = 5 # sec
+            self.start_state = self.traj_data["start_state"]
+            self.track_traj = self.traj_data["trajectory"]
+            self.ts = np.arange(0, self.T, step=self.model.opt.timestep)
+            if self.track_traj is None:
+                self.traj = np.zeros((self.ts.shape[0],12)) #pos vel acc snap
+                payload_pos = self.traj_data["target_pos"]  
+                self.traj[:, 0:3] = payload_pos
+            else:
+                self.T = len(self.traj)
+                self.traj = np.zeros((self.T,12)) #pos vel acc snap
+                payload_st = self.traj_data["target_pos"]  
+                self.traj[:, 0:3] = payload_st[0:3]
+                self.traj[:, 3:6] = payload_st[3:6]
         else:
             print("Invalid trajectory file format")
         
@@ -451,6 +482,12 @@ class CFMujoco():
         else:    
             self.num_robots = 1
         # Create Window
+        if not glfw.init():
+            raise RuntimeError("GLFW initialization failed!")
+
+        # ↓ ADD these; nothing gets deleted ↓
+        if not sim_args["visualize"]:          # or: if not self.visualize
+            glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
         self.window = glfw.create_window(2400, 1200, name, None, None)
         if not self.window:
             glfw.terminate()
@@ -494,9 +531,12 @@ class CFMujoco():
         self.button_left = False
         self.button_right = False
         self.last_x, self.last_y = 0, 0
-        self.controller_list = []
         self.ref_markers_created = False     # <- NEW
         if self.payload:
+            if self.plan_type == "payload_target_pos":
+                self.model_params["m_payload"] = self.traj_data["m_payload"]            
+                self.model_params["l_payload"] = [self.traj_data["l_payload"]]*self.num_robots
+            
             for i in range(self.num_robots):
                 self.controller = LeePayloadController(self.model_params)
                 self.controller_list.append(self.controller)
@@ -592,11 +632,15 @@ class CFMujoco():
             elif self.plan_type == "polynomial":
                 self.data.qpos[:] = [self.traj[0,0], self.traj[0,1], self.traj[0,2], 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]
                 self.data.vel[:] = np.zeros(6 + 6 * self.num_robots)  # initialize qvel with zeros
+            elif self.plan_type == "payload_target_pos":
+                self.data.qpos[:] = self.start_state[0:self.model.nq]
+                self.data.qvel[:] = self.start_state[self.model.nq:self.model.nq+self.model.nv]
         else:
             print("Setting initial state for UAV without payload")
             self.data.qpos[:] = [self.traj[0,0], self.traj[0,1], self.traj[0,2], 1, 0, 0, 0]
             self.data.qvel[:] = [0, 0, 0, 0, 0, 0]
             self.controller.updateState(np.concatenate((self.data.qpos, self.data.qvel)))
+        self.log_states.append(np.concatenate((self.data.qpos, self.data.qvel)).tolist())
 
     def keyboard(self, window, key, scancode, action, mods):
         """Handle keyboard events."""
@@ -632,18 +676,22 @@ class CFMujoco():
         """Run the simulation loop with real-time updates."""
 
         while not glfw.window_should_close(self.window):
-            self.cam.lookat[:] = [self.data.qpos[0]-0.5, self.data.qpos[1], self.data.qpos[2] + .5]
+            self.cam.lookat[:] = [self.data.qpos[0]-0.5, self.data.qpos[1], self.data.qpos[2] + 0.5]
             self.cam.azimuth = 0
             self.cam.elevation = -0
             self.cam.distance = 2.5
             self.setInitState() # set initial state before simulating
-            print("Simulation started with trajectory length:", len(self.traj))
+            print("Simulation started with trajectory length:", len(self.traj)*self.model.opt.timestep, "sec")
             for k, t in enumerate(self.ts):
+                self.log_time.extend([t])
                 if self.payload:
                     for id in range(self.num_robots):
                         self.controller_list[id].team_ids.remove(id)
                         self.controller_list[id].team_ids.insert(0, id) 
-                        self.controller_list[id].updateSetpoint(self.traj[k], self.data.qpos, self.data.qvel, actions=self.planned_actions[k])
+                        if self.actions_ff:
+                            self.controller_list[id].updateSetpoint(self.traj[k], self.data.qpos, self.data.qvel, actions=self.planned_actions[k])
+                        else: 
+                            self.controller_list[id].updateSetpoint(self.traj[k], self.data.qpos, self.data.qvel, actions=None)
                         self.controller_list[id].updateState(self.data.qpos, self.data.qvel, id, tendons=self.tendons)
                         self.controller_list[id].updateNeighbors(self.data.qpos, self.data.qvel, tendons=self.tendons)
                         force = self.controller_list[id].getControl(id=id, tick=k) # force of each motor
@@ -663,7 +711,7 @@ class CFMujoco():
                 mj.mjv_updateScene(self.model, self.data, self.opt, None, self.cam,
                                     mj.mjtCatBit.mjCAT_ALL.value, self.scene)
 
-                if self.payload:
+                if self.payload and self.ghost_mode:
                     self._set_ghost_state(self.dynoplan_acttraj[k])
                     mj.mjv_updateScene(self.ghost_model, self.ghost_data, self.ghost_opt,
                                     None, self.cam, mj.mjtCatBit.mjCAT_ALL.value,
@@ -679,21 +727,33 @@ class CFMujoco():
 
                 # process pending GUI events, call GLFW callbacks
                 glfw.poll_events()
+                self.log_states.append(np.concatenate((self.data.qpos, self.data.qvel)).tolist())
+                self.log_actions.append(self.data.ctrl.tolist())
+            if not self.visualize and self.out_path is not None: 
+                log_traj_data = load_json(self.traj_path)
+                log_traj_data["states"] = self.log_states
+                log_traj_data["actions"] = self.log_actions
+                log_traj_data["time"] = self.log_time
+                save_json(self.out_path, log_traj_data)           
+            if not self.visualize:
+                glfw.set_window_should_close(self.window, True)
         glfw.terminate()
     
       
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--traj_path', required=True, type=str, help="Path to trajectory CSV file or YAML file")
+    parser.add_argument('--out_path', required=False, default=None, type=str, help="Path to trajectory CSV file or YAML file")
     parser.add_argument('--models_path', required=True, type=str, help="Path to model parameters YAML file")
     parser.add_argument('--mj', required=True, type=str, help="Path to MuJoCo xml file")
     parser.add_argument("-p", "--payload", action="store_true")
     parser.add_argument("-t", "--tendons", action="store_true", help="this is specific to the payload case. If it's true then the simulation assume you have tendons between the payload and the quadrotor, otherwise they are rigid links")
+    parser.add_argument("-v", "--visualize", action="store_true", help="enable/disable visualizer, by default it is disabled")
     args = parser.parse_args()
     
     # Load model parameters
     model_params = loadyaml(args.models_path)
-    sim_args = {"model_params": model_params, "traj_path": args.traj_path, "payload": args.payload, "tendons": args.tendons}
+    sim_args = {"model_params": model_params, "traj_path": args.traj_path, "payload": args.payload, "tendons": args.tendons, "visualize": args.visualize, "out_path": args.out_path}
     # Initialize and run simulation
     xml_path = args.mj
     sim = CFMujoco(xml_path, "Crazyflie Simulation", sim_args)
