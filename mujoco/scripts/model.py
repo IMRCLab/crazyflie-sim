@@ -25,7 +25,7 @@ class LeePayloadController():
         t2t = 0.006  # thrust-to-torque ratio
         self.num_robots = model_params["num_robots"]
         self.team_ids = [i for i in range(self.num_robots)]
-        self.ctrlLeeP.en_qdidot = 0
+        self.ctrlLeeP.en_qdidot = 1
         self.ctrlLeeP.gen_hp = 1
         self.ctrlLeeP.en_accrb = 0
         if model_params["plan_type"] == "payload_target_pos":
@@ -316,7 +316,7 @@ class LeePayloadController():
 
         eta = np.array([self.control.thrustSI, self.control.torque[0], self.control.torque[1], self.control.torque[2]]) 
         u = self.B0_inv @ eta
-        # u = np.clip(u, 0.0, 0.15)     # keep within ctrlrange
+        u = np.clip(u, 0.0, 0.15)     # keep within ctrlrange
         return u
 
 
@@ -680,7 +680,7 @@ class CFMujoco():
         """Run the simulation loop with real-time updates."""
 
         while not glfw.window_should_close(self.window):
-            self.cam.lookat[:] = [self.data.qpos[0]-0.5, self.data.qpos[1], self.data.qpos[2] + 0.5]
+            self.cam.lookat[:] = [self.data.qpos[0]-0.5, self.data.qpos[1], self.data.qpos[2] + 2.5]
             self.cam.azimuth = 0
             self.cam.elevation = -0
             self.cam.distance = 2.5
