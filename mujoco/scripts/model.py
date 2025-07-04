@@ -28,7 +28,11 @@ class LeePayloadController():
         self.ctrlLeeP.en_qdidot = 0
         self.ctrlLeeP.gen_hp = 1
         self.ctrlLeeP.en_accrb = 0
-        self.ctrlLeeP.formation_control = 1 # set this to 1 if you don't want to follow a formation 
+        if model_params["plan_type"] == "payload_target_pos":
+            self.ctrlLeeP.formation_control = 1 # set this to 1 if you don't want to follow a formation 
+        else: 
+            self.ctrlLeeP.formation_control = 3 # set this to 1 if you don't want to follow a formation 
+            
         self.gains = [
             (18, 12, 0),
             (18, 12, 0),
@@ -536,7 +540,7 @@ class CFMujoco():
             if self.plan_type == "payload_target_pos":
                 self.model_params["m_payload"] = self.traj_data["m_payload"]            
                 self.model_params["l_payload"] = [self.traj_data["l_payload"]]*self.num_robots
-            
+                self.model_params["plan_type"] = self.plan_type
             for i in range(self.num_robots):
                 self.controller = LeePayloadController(self.model_params)
                 self.controller_list.append(self.controller)
