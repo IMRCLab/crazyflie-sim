@@ -19,7 +19,7 @@ class LeePayloadController():
         cff.controllerLeePayloadInit(self.ctrlLeeP)
         self.ctrlLeeP.mass = model_params["m"][0]
         self.ctrlLeeP.mp = model_params["m_payload"]
-        self.l =  model_params["l_payload"]
+        self.l = model_params["l_payload"]
         arm_length = 0.046  # m
         arm = 0.707106781 * arm_length
         t2t = 0.006  # thrust-to-torque ratio
@@ -302,7 +302,6 @@ class LeePayloadController():
         self.setpoint.acceleration.x = traj[6]  # m/s^2
         self.setpoint.acceleration.y = traj[7]  # m/s^2
         self.setpoint.acceleration.z = traj[8]  # m/s^2
-
         if actions is not None:
             self.updateMuplanned(traj, qpos, qvel, actions)
 
@@ -316,8 +315,8 @@ class LeePayloadController():
         self.ctrlLeeP.payload_vel_prev.z = self.state.payload_vel.z 
 
         eta = np.array([self.control.thrustSI, self.control.torque[0], self.control.torque[1], self.control.torque[2]]) 
-        mf = self.B0_inv @ eta
-        u = np.clip(mf, 0.0, 0.15)     # keep within ctrlrange
+        u = self.B0_inv @ eta
+        # u = np.clip(u, 0.0, 0.15)     # keep within ctrlrange
         return u
 
 
@@ -536,11 +535,12 @@ class CFMujoco():
         self.button_right = False
         self.last_x, self.last_y = 0, 0
         self.ref_markers_created = False     # <- NEW
+        self.model_params["plan_type"] = self.plan_type
+
         if self.payload:
             if self.plan_type == "payload_target_pos":
                 self.model_params["m_payload"] = self.traj_data["m_payload"]            
                 self.model_params["l_payload"] = [self.traj_data["l_payload"]]*self.num_robots
-                self.model_params["plan_type"] = self.plan_type
             for i in range(self.num_robots):
                 self.controller = LeePayloadController(self.model_params)
                 self.controller_list.append(self.controller)
